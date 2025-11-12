@@ -40,4 +40,4 @@ export const PLANS = {
   }
 };
 
-export const STRIPE_PUBLISHABLE_KEY = 'pk_test_...'; // Você vai pegar no Stripe
+export const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SSlhL5QUOaweBvtWeMIS65HIYlfP9fZckCYBL5wRBPEYn5iMf7Ww80ImNgPPdX7Fa2KDQFRfJ2QH1fReCPCXKqy00FK9KM2IJ'
