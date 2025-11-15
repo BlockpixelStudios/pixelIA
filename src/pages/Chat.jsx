@@ -326,7 +326,6 @@ export default function Chat() {
         conversation_id: conversationId,
         role: 'user',
         content: messageText,
-        topic: 'chat',
         created_at: new Date().toISOString()
       };
 
@@ -355,7 +354,7 @@ export default function Chat() {
       setStatusMessage('🤖 A IA está pensando...');
       addConsoleLog('INFO', 'Chamando API GROQ...');
 
-      const model = userProfile.plan === 'avancado' ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
+      const model = userProfile.plan === 'avancado' ? 'llama-3.2-90b-text-preview' : 'llama-3.3-70b-versatile';
       
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -386,7 +385,6 @@ export default function Chat() {
         conversation_id: conversationId,
         role: 'assistant',
         content: data.choices[0].message.content,
-        topic: 'chat',
         created_at: new Date().toISOString()
       };
       
@@ -413,7 +411,6 @@ export default function Chat() {
         conversation_id: conversationId,
         role: 'assistant',
         content: `Desculpe, ocorreu um erro: ${error.message}. Tente novamente.`,
-        topic: 'chat',
         created_at: new Date().toISOString()
       };
       
@@ -824,4 +821,4 @@ export default function Chat() {
       `}</style>
     </div>
   );
-            }
+  }
