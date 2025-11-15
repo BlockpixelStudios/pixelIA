@@ -1,4 +1,5 @@
 export const initTawkTo = () => {
+  // Substitua YOUR_PROPERTY_ID pelo seu ID do Tawk.to
   var Tawk_API = Tawk_API || {};
   var Tawk_LoadStart = new Date();
   
