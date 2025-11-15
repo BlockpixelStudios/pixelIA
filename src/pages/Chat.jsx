@@ -11,9 +11,11 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLimitWarning, setShowLimitWarning] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleMessages, setConsoleMessages] = useState([]);
+  const [statusMessage, setStatusMessage] = useState('');
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -24,6 +26,12 @@ export default function Chat() {
     "Explique o que é física quântica",
     "Conte uma história engraçada e interessante"
   ];
+
+  const addConsoleLog = (type, message) => {
+    const timestamp = new Date().toLocaleTimeString('pt-BR');
+    setConsoleMessages(prev => [...prev, { type, message, timestamp }]);
+    console.log(`[${timestamp}] ${type}:`, message);
+  };
 
   useEffect(() => {
     checkUser();
@@ -51,24 +59,39 @@ export default function Chat() {
   }, [input]);
 
   const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      navigate('/auth');
-    } else {
-      setUser(user);
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      
+      if (!user) {
+        addConsoleLog('INFO', 'Usuário não autenticado, redirecionando...');
+        navigate('/auth');
+      } else {
+        setUser(user);
+        addConsoleLog('SUCCESS', `Usuário autenticado: ${user.email}`);
+      }
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao verificar usuário: ${error.message}`);
     }
   };
 
   const loadUserProfile = async () => {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
 
-    if (data) {
-      setUserProfile(data);
-      checkMessageLimit(data);
+      if (error) throw error;
+
+      if (data) {
+        setUserProfile(data);
+        addConsoleLog('SUCCESS', `Perfil carregado - Plano: ${data.plan}`);
+        checkMessageLimit(data);
+      }
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao carregar perfil: ${error.message}`);
     }
   };
 
@@ -79,100 +102,149 @@ export default function Chat() {
       
       if (lastMessageDate === today && profile.messages_used_today >= 50) {
         setShowLimitWarning(true);
+        addConsoleLog('WARNING', 'Limite de mensagens atingido!');
       }
     }
   };
 
   const loadConversations = async () => {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
 
-    if (data) {
-      setConversations(data);
+      if (error) throw error;
+
+      if (data) {
+        setConversations(data);
+        addConsoleLog('SUCCESS', `${data.length} conversas carregadas`);
+      }
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao carregar conversas: ${error.message}`);
     }
   };
 
   const loadMessages = async () => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', currentConversation.id)
-      .order('created_at', { ascending: true });
+    try {
+      setStatusMessage('Carregando mensagens...');
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', currentConversation.id)
+        .order('created_at', { ascending: true });
 
-    if (data) {
-      setMessages(data);
+      if (error) throw error;
+
+      if (data) {
+        setMessages(data);
+        addConsoleLog('SUCCESS', `${data.length} mensagens carregadas`);
+      }
+      setStatusMessage('');
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao carregar mensagens: ${error.message}`);
+      setStatusMessage('');
     }
   };
 
   const createNewConversation = async () => {
-    const { data, error } = await supabase
-      .from('conversations')
-      .insert([
-        { 
-          user_id: user.id, 
-          title: 'Nova Conversa',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ])
-      .select()
-      .single();
+    try {
+      setStatusMessage('Criando nova conversa...');
+      const { data, error } = await supabase
+        .from('conversations')
+        .insert([
+          { 
+            user_id: user.id, 
+            title: 'Nova Conversa',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select()
+        .single();
 
-    if (data) {
-      setCurrentConversation(data);
-      setConversations([data, ...conversations]);
-      setMessages([]);
-      setShowLimitWarning(false);
+      if (error) throw error;
+
+      if (data) {
+        setCurrentConversation(data);
+        setConversations([data, ...conversations]);
+        setMessages([]);
+        setShowLimitWarning(false);
+        addConsoleLog('SUCCESS', 'Nova conversa criada');
+      }
+      setStatusMessage('');
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao criar conversa: ${error.message}`);
+      setStatusMessage('');
     }
   };
 
   const updateConversationTitle = async (conversationId, firstMessage) => {
-    const title = firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '');
-    await supabase
-      .from('conversations')
-      .update({ title, updated_at: new Date().toISOString() })
-      .eq('id', conversationId);
-    
-    loadConversations();
+    try {
+      const title = firstMessage.slice(0, 50) + (firstMessage.length > 50 ? '...' : '');
+      const { error } = await supabase
+        .from('conversations')
+        .update({ title, updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      if (error) throw error;
+      
+      loadConversations();
+      addConsoleLog('SUCCESS', 'Título da conversa atualizado');
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao atualizar título: ${error.message}`);
+    }
   };
 
   const deleteConversation = async (conversationId) => {
-    await supabase
-      .from('conversations')
-      .delete()
-      .eq('id', conversationId);
-    
-    if (currentConversation?.id === conversationId) {
-      setCurrentConversation(null);
-      setMessages([]);
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', conversationId);
+
+      if (error) throw error;
+      
+      if (currentConversation?.id === conversationId) {
+        setCurrentConversation(null);
+        setMessages([]);
+      }
+      loadConversations();
+      addConsoleLog('SUCCESS', 'Conversa deletada');
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao deletar conversa: ${error.message}`);
     }
-    loadConversations();
   };
 
   const updateMessageCount = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    const lastMessageDate = userProfile.last_message_date?.split('T')[0];
-    
-    let newCount = 1;
-    if (lastMessageDate === today) {
-      newCount = (userProfile.messages_used_today || 0) + 1;
-    }
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const lastMessageDate = userProfile.last_message_date?.split('T')[0];
+      
+      let newCount = 1;
+      if (lastMessageDate === today) {
+        newCount = (userProfile.messages_used_today || 0) + 1;
+      }
 
-    await supabase
-      .from('user_profiles')
-      .update({
-        messages_used_today: newCount,
-        last_message_date: new Date().toISOString()
-      })
-      .eq('user_id', user.id);
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          messages_used_today: newCount,
+          last_message_date: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
 
-    setUserProfile({ ...userProfile, messages_used_today: newCount, last_message_date: new Date().toISOString() });
-    
-    if (userProfile.plan === 'essencial' && newCount >= 50) {
-      setShowLimitWarning(true);
+      if (error) throw error;
+
+      setUserProfile({ ...userProfile, messages_used_today: newCount, last_message_date: new Date().toISOString() });
+      
+      if (userProfile.plan === 'essencial' && newCount >= 50) {
+        setShowLimitWarning(true);
+        addConsoleLog('WARNING', 'Limite de mensagens atingido!');
+      }
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao atualizar contador: ${error.message}`);
     }
   };
 
@@ -189,26 +261,35 @@ export default function Chat() {
   };
 
   const handleSuggestedPrompt = async (prompt) => {
-    // Se não tem conversa, criar uma nova primeiro
+    addConsoleLog('INFO', `Prompt sugerido selecionado: ${prompt}`);
+    
     if (!currentConversation) {
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert([
-          { 
-            user_id: user.id, 
-            title: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ])
-        .select()
-        .single();
+      try {
+        setStatusMessage('Criando conversa...');
+        const { data, error } = await supabase
+          .from('conversations')
+          .insert([
+            { 
+              user_id: user.id, 
+              title: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }
+          ])
+          .select()
+          .single();
 
-      if (data) {
-        setCurrentConversation(data);
-        setConversations([data, ...conversations]);
-        // Aguardar um pouco para garantir que a conversa foi criada
-        setTimeout(() => handleSend(prompt, data.id), 100);
+        if (error) throw error;
+
+        if (data) {
+          setCurrentConversation(data);
+          setConversations([data, ...conversations]);
+          setTimeout(() => handleSend(prompt, data.id), 100);
+        }
+        setStatusMessage('');
+      } catch (error) {
+        addConsoleLog('ERROR', `Erro ao criar conversa: ${error.message}`);
+        setStatusMessage('');
       }
     } else {
       handleSend(prompt, currentConversation.id);
@@ -216,7 +297,10 @@ export default function Chat() {
   };
 
   const handleSend = async (messageText = input, conversationId = currentConversation?.id) => {
-    if (!messageText.trim() || isLoading || !conversationId) return;
+    if (!messageText.trim() || isLoading || !conversationId) {
+      addConsoleLog('WARNING', 'Mensagem vazia ou sem conversa ativa');
+      return;
+    }
 
     // Verificar limite de mensagens
     if (userProfile.plan === 'essencial') {
@@ -226,41 +310,51 @@ export default function Chat() {
       
       if (count >= 50) {
         setShowLimitWarning(true);
+        addConsoleLog('ERROR', 'Limite de mensagens diário atingido');
         return;
       }
     }
 
-    const userMessage = {
-      conversation_id: conversationId,
-      role: 'user',
-      content: messageText,
-      topic: 'chat',
-      created_at: new Date().toISOString()
-    };
-
+    addConsoleLog('INFO', 'Enviando mensagem...');
     setInput('');
     setIsLoading(true);
-
-    // Salvar mensagem do usuário
-    const { data: savedUserMsg } = await supabase
-      .from('messages')
-      .insert([userMessage])
-      .select()
-      .single();
-
-    if (savedUserMsg) {
-      setMessages(prev => [...prev, savedUserMsg]);
-    }
-
-    // Atualizar título da conversa se for a primeira mensagem
-    if (messages.length === 0) {
-      updateConversationTitle(conversationId, messageText);
-    }
-
-    // Atualizar contador de mensagens
-    await updateMessageCount();
+    setStatusMessage('Salvando sua mensagem...');
 
     try {
+      // Salvar mensagem do usuário
+      const userMessage = {
+        conversation_id: conversationId,
+        role: 'user',
+        content: messageText,
+        topic: 'chat',
+        created_at: new Date().toISOString()
+      };
+
+      const { data: savedUserMsg, error: saveError } = await supabase
+        .from('messages')
+        .insert([userMessage])
+        .select()
+        .single();
+
+      if (saveError) throw saveError;
+
+      if (savedUserMsg) {
+        setMessages(prev => [...prev, savedUserMsg]);
+        addConsoleLog('SUCCESS', 'Mensagem do usuário salva');
+      }
+
+      // Atualizar título se for primeira mensagem
+      if (messages.length === 0) {
+        updateConversationTitle(conversationId, messageText);
+      }
+
+      // Atualizar contador
+      await updateMessageCount();
+
+      // Chamar API do GROQ
+      setStatusMessage('🤖 A IA está pensando...');
+      addConsoleLog('INFO', 'Chamando API GROQ...');
+
       const model = userProfile.plan === 'avancado' ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
       
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -271,14 +365,23 @@ export default function Chat() {
         },
         body: JSON.stringify({
           model: model,
-          messages: [...messages, savedUserMsg].map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
+          messages: [...messages.map(m => ({ role: m.role, content: m.content })), 
+                     { role: 'user', content: messageText }],
+          temperature: 0.7,
+          max_tokens: 1000
         })
       });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`API Error: ${errorData.error?.message || response.statusText}`);
+      }
+
       const data = await response.json();
+      addConsoleLog('SUCCESS', 'Resposta recebida da API');
+
+      setStatusMessage('Salvando resposta...');
+      
       const assistantMessage = {
         conversation_id: conversationId,
         role: 'assistant',
@@ -287,22 +390,29 @@ export default function Chat() {
         created_at: new Date().toISOString()
       };
       
-      // Salvar resposta do assistente
-      const { data: savedAssistantMsg } = await supabase
+      const { data: savedAssistantMsg, error: assistantError } = await supabase
         .from('messages')
         .insert([assistantMessage])
         .select()
         .single();
 
+      if (assistantError) throw assistantError;
+
       if (savedAssistantMsg) {
         setMessages(prev => [...prev, savedAssistantMsg]);
+        addConsoleLog('SUCCESS', 'Resposta da IA salva');
       }
+
+      setStatusMessage('');
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
+      addConsoleLog('ERROR', `Erro ao enviar mensagem: ${error.message}`);
+      setStatusMessage('');
+      
+      // Salvar mensagem de erro
       const errorMsg = {
         conversation_id: conversationId,
         role: 'assistant',
-        content: 'Desculpe, ocorreu um erro. Tente novamente.',
+        content: `Desculpe, ocorreu um erro: ${error.message}. Tente novamente.`,
         topic: 'chat',
         created_at: new Date().toISOString()
       };
@@ -318,6 +428,7 @@ export default function Chat() {
       }
     } finally {
       setIsLoading(false);
+      setStatusMessage('');
     }
   };
 
@@ -325,14 +436,6 @@ export default function Chat() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
-    }
-  };
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      // TODO: Implementar upload de arquivo
     }
   };
 
@@ -348,11 +451,7 @@ export default function Chat() {
   };
 
   const getNextResetTime = () => {
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    return tomorrow.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return '00:00';
   };
 
   return (
@@ -374,8 +473,21 @@ export default function Chat() {
       </div>
 
       <div className="flex h-screen relative z-10">
+        {/* Overlay para mobile quando sidebar aberto */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
-        <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 overflow-hidden`}>
+        <div className={`
+          fixed lg:relative inset-y-0 left-0 z-50
+          w-80 transition-transform duration-300
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${!sidebarOpen && 'lg:w-0'}
+        `}>
           <div className="h-full bg-white/5 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col pt-20">
             <button
               onClick={createNewConversation}
@@ -387,11 +499,62 @@ export default function Chat() {
               Nova Conversa
             </button>
 
+            {/* Menu Items */}
+            <div className="space-y-2 mb-4">
+              <button
+                onClick={() => navigate('/planos')}
+                className="w-full bg-white/5 hover:bg-white/10 text-white rounded-lg py-2 px-4 flex items-center gap-3 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Planos</span>
+              </button>
+
+              <button
+                onClick={() => setShowConsole(!showConsole)}
+                className="w-full bg-white/5 hover:bg-white/10 text-white rounded-lg py-2 px-4 flex items-center gap-3 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Console</span>
+              </button>
+            </div>
+
+            {/* Console */}
+            {showConsole && (
+              <div className="bg-black/50 backdrop-blur-lg rounded-lg p-3 mb-4 max-h-40 overflow-y-auto">
+                <p className="text-white/70 text-xs font-bold mb-2">Console de Debug</p>
+                <div className="space-y-1">
+                  {consoleMessages.slice(-10).map((log, idx) => (
+                    <div key={idx} className="text-xs">
+                      <span className="text-white/50">[{log.timestamp}]</span>
+                      <span className={`ml-2 ${
+                        log.type === 'ERROR' ? 'text-red-400' :
+                        log.type === 'SUCCESS' ? 'text-green-400' :
+                        log.type === 'WARNING' ? 'text-yellow-400' :
+                        'text-blue-400'
+                      }`}>
+                        {log.type}:
+                      </span>
+                      <span className="text-white/70 ml-1">{log.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Conversations List */}
             <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+              <p className="text-white/50 text-xs font-semibold mb-2">CONVERSAS</p>
               {conversations.map(conv => (
                 <div
                   key={conv.id}
-                  onClick={() => setCurrentConversation(conv)}
+                  onClick={() => {
+                    setCurrentConversation(conv);
+                    setSidebarOpen(false);
+                  }}
                   className={`p-3 rounded-lg cursor-pointer transition-all ${
                     currentConversation?.id === conv.id
                       ? 'bg-white/20 border border-white/30'
@@ -416,6 +579,7 @@ export default function Chat() {
               ))}
             </div>
 
+            {/* User Info */}
             <div className="mt-4 pt-4 border-t border-white/10">
               <div className="text-white/70 text-sm">
                 <p className="font-semibold mb-1">{userProfile?.plan === 'avancado' ? '✨ Plano Avançado' : '🆓 Plano Essencial'}</p>
@@ -430,10 +594,10 @@ export default function Chat() {
         {/* Toggle Sidebar Button */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="absolute left-4 top-20 z-20 bg-white/10 backdrop-blur-lg border border-white/20 text-white rounded-lg p-2 hover:bg-white/20 transition-all"
+          className="fixed left-4 top-20 z-30 bg-white/10 backdrop-blur-lg border border-white/20 text-white rounded-lg p-2 hover:bg-white/20 transition-all lg:absolute"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sidebarOpen ? "M11 19l-7-7 7-7m8 14l-7-7 7-7" : "M13 5l7 7-7 7M5 5l7 7-7 7"} />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={sidebarOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
           </svg>
         </button>
 
@@ -443,8 +607,8 @@ export default function Chat() {
             // Welcome Screen
             <div className="flex-1 flex flex-col items-center justify-center px-4">
               <div className="text-center mb-8">
-                <h1 className="text-5xl font-bold text-white mb-4">{getGreeting()}</h1>
-                <p className="text-xl text-white/70">Como posso te ajudar hoje?</p>
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{getGreeting()}</h1>
+                <p className="text-lg md:text-xl text-white/70">Como posso te ajudar hoje?</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl w-full">
@@ -452,7 +616,8 @@ export default function Chat() {
                   <button
                     key={index}
                     onClick={() => handleSuggestedPrompt(prompt)}
-                    className="bg-white/10 backdrop-blur-lg border border-white/20 text-white rounded-2xl p-6 hover:bg-white/20 transition-all text-left group"
+                    disabled={isLoading}
+                    className="bg-white/10 backdrop-blur-lg border border-white/20 text-white rounded-2xl p-6 hover:bg-white/20 transition-all text-left group disabled:opacity-50"
                   >
                     <p className="text-sm group-hover:text-pink-300 transition-colors">{prompt}</p>
                   </button>
@@ -468,13 +633,13 @@ export default function Chat() {
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-6 py-4 shadow-2xl ${
+                    className={`max-w-[85%] md:max-w-[80%] rounded-2xl px-4 md:px-6 py-4 shadow-2xl ${
                       message.role === 'user'
                         ? 'bg-gradient-to-br from-pink-500/20 to-purple-600/20 backdrop-blur-xl border border-pink-300/30 text-white'
                         : 'bg-white/10 backdrop-blur-xl border border-white/20 text-white'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap leading-relaxed text-[15px]">{message.content}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-[15px]">{message.content}</p>
                   </div>
                 </div>
               ))}
@@ -497,13 +662,17 @@ export default function Chat() {
 
           {/* Status Bar acima do input */}
           <div className="px-4 py-2 border-t border-white/10 backdrop-blur-sm">
-            <div className="max-w-4xl mx-auto flex items-center justify-between text-sm">
+            <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between text-xs md:text-sm gap-2">
               <span className="text-white/70">
                 🤖 Modelo: <span className="font-semibold text-white">{getModelName()}</span>
               </span>
               
-              {showLimitWarning ? (
-                <span className="text-red-400 font-semibold animate-pulse">
+              {statusMessage ? (
+                <span className="text-blue-400 font-semibold animate-pulse">
+                  {statusMessage}
+                </span>
+              ) : showLimitWarning ? (
+                <span className="text-red-400 font-semibold">
                   🚨 Limite atingido! Novo limite: {getNextResetTime()}
                 </span>
               ) : userProfile?.plan === 'essencial' && (
@@ -520,7 +689,7 @@ export default function Chat() {
               <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-2 flex items-end gap-2 shadow-2xl">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="text-white/70 hover:text-white p-2 transition-colors flex-shrink-0"
+                  className="text-white/70 hover:text-white p-2 transition-colors flex-shrink-0 hidden md:block"
                   title="Anexar arquivo"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -530,7 +699,6 @@ export default function Chat() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  onChange={handleFileSelect}
                   className="hidden"
                   accept="image/*,.pdf,.doc,.docx"
                 />
@@ -541,7 +709,7 @@ export default function Chat() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Digite sua mensagem..."
-                  className="flex-1 bg-transparent text-white placeholder-white/50 outline-none resize-none px-4 py-3 max-h-[200px] min-h-[24px] text-[15px]"
+                  className="flex-1 bg-transparent text-white placeholder-white/50 outline-none resize-none px-3 md:px-4 py-3 max-h-[200px] min-h-[24px] text-sm md:text-[15px]"
                   rows="1"
                   disabled={isLoading || showLimitWarning}
                 />
@@ -549,7 +717,7 @@ export default function Chat() {
                 <button
                   onClick={() => handleSend()}
                   disabled={!input.trim() || isLoading || showLimitWarning}
-                  className="bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full p-3 hover:from-pink-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-lg hover:shadow-xl transform hover:scale-105"
+                  className="bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full p-3 hover:from-pink-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -561,7 +729,7 @@ export default function Chat() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes fade-in {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
@@ -656,4 +824,4 @@ export default function Chat() {
       `}</style>
     </div>
   );
-}
+            }
