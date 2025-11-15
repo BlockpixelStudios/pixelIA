@@ -1,3 +1,5 @@
+// 📍 ARQUIVO: src/config/plans.js
+
 export const PLANS = {
   FREE: {
     id: 'free',
@@ -26,8 +28,8 @@ export const PLANS = {
       '✨ Mensagens ilimitadas',
       '🚀 Modelo Llama 3.3 70B Premium',
       '📚 Histórico ilimitado',
-      '⚡ Respostas prioritárias (+ rápidas)',
-      '🎁 Acesso antecipado a recursos',
+      '⚡ Respostas prioritárias',
+      '🎁 Acesso antecipado',
       '💬 Suporte prioritário 24/7',
       '🎨 Personalização avançada'
     ],
@@ -41,4 +43,5 @@ export const PLANS = {
   }
 };
 
+// API Key do GROQ (guardada no .env)
 export const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
