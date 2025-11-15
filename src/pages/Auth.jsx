@@ -1,3 +1,5 @@
+// 📍 ARQUIVO: src/pages/Auth.jsx
+
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, User, Mail, Lock, Loader2, UserCircle, ArrowLeft } from 'lucide-react';
@@ -73,24 +75,23 @@ export default function Auth() {
   };
 
   const handleGuestMode = () => {
-    // Criar um "usuário" guest temporário
     const guestUser = {
       id: 'guest-' + Date.now(),
       email: 'guest@pixelia.com',
       isGuest: true
     };
     
-    // Guardar no localStorage
     localStorage.setItem('guest_user', JSON.stringify(guestUser));
     navigate('/chat');
   };
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0">
-        <div className="absolute top-20 right-20 w-96 h-96 bg-cyan-500 rounded-full mix-blend-screen filter blur-3xl opacity-10 animate-pulse"></div>
-        <div className="absolute bottom-20 left-20 w-96 h-96 bg-purple-500 rounded-full mix-blend-screen filter blur-3xl opacity-10 animate-pulse" style={{ animationDelay: '2s' }}></div>
+      {/* Background galáctico */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-purple-950/50 to-slate-950"></div>
+        <div className="absolute top-20 right-20 w-96 h-96 bg-neon-blue rounded-full mix-blend-screen filter blur-3xl opacity-10 animate-pulse-slow"></div>
+        <div className="absolute bottom-20 left-20 w-96 h-96 bg-neon-purple rounded-full mix-blend-screen filter blur-3xl opacity-10 animate-pulse-slow" style={{ animationDelay: '2s' }}></div>
       </div>
 
       {/* Back Button */}
@@ -103,17 +104,20 @@ export default function Auth() {
       </Link>
 
       {/* Auth Card */}
-      <div className="bg-gradient-to-br from-gray-900 to-black border border-gray-800 rounded-3xl p-8 max-w-md w-full relative z-10 shadow-2xl">
+      <div className="relative z-10 glass rounded-3xl p-8 max-w-md w-full border border-white/10 animate-fade-in">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-block bg-gradient-to-r from-cyan-500 to-purple-600 p-3 rounded-2xl mb-4">
-            <Sparkles className="w-10 h-10 text-white" />
+          <div className="inline-block relative mb-4">
+            <div className="absolute inset-0 bg-gradient-to-r from-neon-blue to-neon-purple rounded-2xl blur-xl opacity-50"></div>
+            <div className="relative bg-gradient-to-br from-neon-blue via-neon-purple to-neon-pink p-3 rounded-2xl">
+              <Sparkles className="w-10 h-10 text-white" strokeWidth={2.5} />
+            </div>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-2">
+          <h2 className="text-3xl font-black text-white mb-2">
             {authMode === 'login' ? 'Bem-vindo!' : 'Criar conta'}
           </h2>
           <p className="text-gray-400">
-            {authMode === 'login' ? 'Entre para continuar conversando' : 'Junte-se gratuitamente à PixelIA'}
+            {authMode === 'login' ? 'Entre para continuar conversando' : 'Junte-se gratuitamente'}
           </p>
         </div>
 
@@ -145,7 +149,7 @@ export default function Auth() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Seu nome"
                   required
-                  className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition"
+                  className="w-full pl-11 pr-4 py-3 glass border border-white/10 rounded-xl focus:ring-2 focus:ring-neon-blue focus:border-transparent text-white placeholder-gray-500 transition"
                 />
               </div>
             </div>
@@ -163,7 +167,7 @@ export default function Auth() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
                 required
-                className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition"
+                className="w-full pl-11 pr-4 py-3 glass border border-white/10 rounded-xl focus:ring-2 focus:ring-neon-blue focus:border-transparent text-white placeholder-gray-500 transition"
               />
             </div>
           </div>
@@ -181,7 +185,7 @@ export default function Auth() {
                 placeholder="••••••••"
                 required
                 minLength={6}
-                className="w-full pl-11 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-white placeholder-gray-500 transition"
+                className="w-full pl-11 pr-4 py-3 glass border border-white/10 rounded-xl focus:ring-2 focus:ring-neon-blue focus:border-transparent text-white placeholder-gray-500 transition"
               />
             </div>
             {authMode === 'signup' && (
@@ -192,12 +196,12 @@ export default function Auth() {
           <button
             type="submit"
             disabled={authLoading}
-            className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 text-white py-3 rounded-xl font-bold hover:scale-105 transition shadow-lg shadow-cyan-500/25 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-neon-blue to-neon-purple hover:from-neon-purple hover:to-neon-pink text-white py-3 rounded-xl font-bold transition hover:scale-105 shadow-lg neon-glow disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2"
           >
             {authLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                {authMode === 'login' ? 'Entrando...' : 'Criando conta...'}
+                {authMode === 'login' ? 'Entrando...' : 'Criando...'}
               </>
             ) : (
               authMode === 'login' ? 'Entrar' : 'Criar Conta'
@@ -208,17 +212,17 @@ export default function Auth() {
         {/* Divider */}
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-800"></div>
+            <div className="w-full border-t border-white/10"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-gradient-to-br from-gray-900 to-black text-gray-400">ou</span>
+            <span className="px-4 glass text-gray-400">ou</span>
           </div>
         </div>
 
         {/* Guest Mode */}
         <button
           onClick={handleGuestMode}
-          className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white py-3 rounded-xl font-semibold transition flex items-center justify-center gap-2"
+          className="w-full glass hover:bg-white/10 border border-white/10 text-white py-3 rounded-xl font-semibold transition flex items-center justify-center gap-2"
         >
           <UserCircle className="w-5 h-5" />
           Entrar como Visitante
@@ -226,7 +230,7 @@ export default function Auth() {
         
         <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
           <p className="text-xs text-yellow-200 text-center">
-            ⚠️ <strong>Modo Visitante:</strong> Apenas 10 mensagens/dia e sem histórico salvo
+            ⚠️ <strong>Modo Visitante:</strong> 10 msg/dia, sem histórico salvo
           </p>
         </div>
 
@@ -249,20 +253,20 @@ export default function Auth() {
         {/* Legal Notice */}
         <div className="mt-6 text-center text-xs text-gray-500">
           Ao continuar, você concorda com nossos{' '}
-          <Link to="/termos" className="text-cyan-400 hover:underline">
+          <Link to="/termos" className="text-neon-blue hover:underline">
             Termos de Uso
           </Link>{' '}
           e{' '}
-          <Link to="/privacidade" className="text-cyan-400 hover:underline">
+          <Link to="/privacidade" className="text-neon-blue hover:underline">
             Política de Privacidade
           </Link>
         </div>
       </div>
 
-      {/* Decorative Elements */}
-      <div className="absolute bottom-10 left-10 text-gray-800 text-9xl font-black opacity-5 pointer-events-none hidden lg:block">
+      {/* Decorative Text */}
+      <div className="absolute bottom-10 right-10 text-gray-900 text-9xl font-black opacity-5 pointer-events-none hidden lg:block">
         PixelIA
       </div>
     </div>
   );
-}
+              }
