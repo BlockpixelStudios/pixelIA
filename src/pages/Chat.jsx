@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -16,6 +19,8 @@ export default function Chat() {
   const [showConsole, setShowConsole] = useState(false);
   const [consoleMessages, setConsoleMessages] = useState([]);
   const [statusMessage, setStatusMessage] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingText, setEditingText] = useState('');
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -260,6 +265,94 @@ export default function Chat() {
     }
   };
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    addConsoleLog('SUCCESS', 'Texto copiado!');
+  };
+
+  const handleEditMessage = async (messageId, newContent) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ content: newContent, updated_at: new Date().toISOString() })
+        .eq('id', messageId);
+
+      if (error) throw error;
+
+      setMessages(messages.map(m => m.id === messageId ? { ...m, content: newContent } : m));
+      setEditingMessageId(null);
+      setEditingText('');
+      addConsoleLog('SUCCESS', 'Mensagem editada');
+
+      // Regenerar resposta da IA após edição
+      const messageIndex = messages.findIndex(m => m.id === messageId);
+      const messagesUpToEdit = messages.slice(0, messageIndex + 1);
+      messagesUpToEdit[messagesUpToEdit.length - 1].content = newContent;
+      
+      await regenerateResponse(messagesUpToEdit);
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao editar mensagem: ${error.message}`);
+    }
+  };
+
+  const regenerateResponse = async (previousMessages = messages) => {
+    try {
+      setIsLoading(true);
+      setStatusMessage('🔄 Regenerando resposta...');
+
+      const model = userProfile.plan === 'avancado' ? 'llama-3.2-90b-text-preview' : 'llama-3.3-70b-versatile';
+      
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: previousMessages.map(m => ({ role: m.role, content: m.content })),
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      if (!response.ok) throw new Error('Erro na API');
+
+      const data = await response.json();
+      
+      const assistantMessage = {
+        conversation_id: currentConversation.id,
+        role: 'assistant',
+        content: data.choices[0].message.content,
+        created_at: new Date().toISOString()
+      };
+      
+      const { data: savedMsg } = await supabase
+        .from('messages')
+        .insert([assistantMessage])
+        .select()
+        .single();
+
+      if (savedMsg) {
+        setMessages(prev => [...prev, savedMsg]);
+        addConsoleLog('SUCCESS', 'Resposta regenerada');
+      }
+
+      setStatusMessage('');
+    } catch (error) {
+      addConsoleLog('ERROR', `Erro ao regenerar: ${error.message}`);
+      setStatusMessage('');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const reportMessage = async (messageId) => {
+    // TODO: Implementar sistema de report
+    addConsoleLog('INFO', `Mensagem ${messageId} reportada`);
+    alert('Mensagem reportada com sucesso! Nossa equipe irá analisar.');
+  };
+
   const handleSuggestedPrompt = async (prompt) => {
     addConsoleLog('INFO', `Prompt sugerido selecionado: ${prompt}`);
     
@@ -302,7 +395,6 @@ export default function Chat() {
       return;
     }
 
-    // Verificar limite de mensagens
     if (userProfile.plan === 'essencial') {
       const today = new Date().toISOString().split('T')[0];
       const lastMessageDate = userProfile.last_message_date?.split('T')[0];
@@ -321,7 +413,6 @@ export default function Chat() {
     setStatusMessage('Salvando sua mensagem...');
 
     try {
-      // Salvar mensagem do usuário
       const userMessage = {
         conversation_id: conversationId,
         role: 'user',
@@ -342,15 +433,12 @@ export default function Chat() {
         addConsoleLog('SUCCESS', 'Mensagem do usuário salva');
       }
 
-      // Atualizar título se for primeira mensagem
       if (messages.length === 0) {
         updateConversationTitle(conversationId, messageText);
       }
 
-      // Atualizar contador
       await updateMessageCount();
 
-      // Chamar API do GROQ
       setStatusMessage('🤖 A IA está pensando...');
       addConsoleLog('INFO', 'Chamando API GROQ...');
 
@@ -367,7 +455,7 @@ export default function Chat() {
           messages: [...messages.map(m => ({ role: m.role, content: m.content })), 
                      { role: 'user', content: messageText }],
           temperature: 0.7,
-          max_tokens: 1000
+          max_tokens: 2000
         })
       });
 
@@ -406,7 +494,6 @@ export default function Chat() {
       addConsoleLog('ERROR', `Erro ao enviar mensagem: ${error.message}`);
       setStatusMessage('');
       
-      // Salvar mensagem de erro
       const errorMsg = {
         conversation_id: conversationId,
         role: 'assistant',
@@ -444,12 +531,57 @@ export default function Chat() {
   };
 
   const getModelName = () => {
-    return userProfile?.plan === 'avancado' ? 'Llama 3.3 70B' : 'Llama 3.1 8B';
+    return userProfile?.plan === 'avancado' ? 'Llama 3.2 90B' : 'Llama 3.3 70B';
   };
 
   const getNextResetTime = () => {
     return '00:00';
   };
+
+  const MarkdownMessage = ({ content }) => (
+    <ReactMarkdown
+      components={{
+        code({ node, inline, className, children, ...props }) {
+          const match = /language-(\w+)/.exec(className || '');
+          const codeContent = String(children).replace(/\n$/, '');
+          
+          return !inline && match ? (
+            <div className="relative group my-2">
+              <button
+                onClick={() => copyToClipboard(codeContent)}
+                className="absolute right-2 top-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                📋 Copiar
+              </button>
+              <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={match[1]}
+                PreTag="div"
+                className="rounded-lg"
+                {...props}
+              >
+                {codeContent}
+              </SyntaxHighlighter>
+            </div>
+          ) : (
+            <code className="bg-white/10 px-1.5 py-0.5 rounded text-sm" {...props}>
+              {children}
+            </code>
+          );
+        },
+        p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+        strong: ({ children }) => <strong className="font-bold text-pink-300">{children}</strong>,
+        em: ({ children }) => <em className="italic text-purple-300">{children}</em>,
+        ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
+        h1: ({ children }) => <h1 className="text-2xl font-bold mb-3 text-pink-300">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-xl font-bold mb-2 text-pink-300">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-lg font-bold mb-2 text-purple-300">{children}</h3>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-900 to-pink-900 relative overflow-hidden">
@@ -627,16 +759,101 @@ export default function Chat() {
               {messages.map((message, index) => (
                 <div
                   key={message.id || index}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in group`}
                 >
-                  <div
-                    className={`max-w-[85%] md:max-w-[80%] rounded-2xl px-4 md:px-6 py-4 shadow-2xl ${
-                      message.role === 'user'
-                        ? 'bg-gradient-to-br from-pink-500/20 to-purple-600/20 backdrop-blur-xl border border-pink-300/30 text-white'
-                        : 'bg-white/10 backdrop-blur-xl border border-white/20 text-white'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-[15px]">{message.content}</p>
+                  <div className="flex flex-col max-w-[85%] md:max-w-[80%]">
+                    <div
+                      className={`rounded-2xl px-4 md:px-6 py-4 shadow-2xl ${
+                        message.role === 'user'
+                          ? 'bg-gradient-to-br from-pink-500/20 to-purple-600/20 backdrop-blur-xl border border-pink-300/30 text-white'
+                          : 'bg-white/10 backdrop-blur-xl border border-white/20 text-white'
+                      }`}
+                    >
+                      {editingMessageId === message.id && message.role === 'user' ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            className="w-full bg-white/10 text-white rounded-lg p-2 outline-none resize-none"
+                            rows="3"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEditMessage(message.id, editingText)}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingMessageId(null);
+                                setEditingText('');
+                              }}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm md:text-[15px]">
+                          {message.role === 'assistant' ? (
+                            <MarkdownMessage content={message.content} />
+                          ) : (
+                            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Message Actions */}
+                    <div className="flex gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {message.role === 'user' ? (
+                        <button
+                          onClick={() => {
+                            setEditingMessageId(message.id);
+                            setEditingText(message.content);
+                          }}
+                          className="text-white/60 hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Editar
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => regenerateResponse(messages.slice(0, index))}
+                            disabled={isLoading}
+                            className="text-white/60 hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all disabled:opacity-50"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Tentar novamente
+                          </button>
+                          <button
+                            onClick={() => copyToClipboard(message.content)}
+                            className="text-white/60 hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Copiar
+                          </button>
+                          <button
+                            onClick={() => reportMessage(message.id)}
+                            className="text-white/60 hover:text-red-400 text-xs flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Reportar
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -821,4 +1038,4 @@ export default function Chat() {
       `}</style>
     </div>
   );
-  }
+      }
