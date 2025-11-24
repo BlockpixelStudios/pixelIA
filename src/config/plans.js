@@ -2,46 +2,44 @@
 
 export const PLANS = {
   FREE: {
-    id: 'free',
     name: 'Essencial',
+    badge: '🆓',
     price: 0,
     features: [
       '50 mensagens por dia',
-      'Modelo Llama 3.1 70B',
-      'Histórico de 7 dias',
-      'Suporte por email'
-    ],
-    limits: {
-      messagesPerDay: 50,
-      historyDays: 7,
-      model: 'llama-3.1-70b-versatile'
-    },
-    badge: '🆓',
-    color: 'from-gray-500 to-gray-600'
+      'Acesso ao modelo Llama 3.3 70B',
+      'Histórico de conversas',
+      'Suporte por email',
+      'Todas as funcionalidades básicas'
+    ]
   },
   PRO: {
-    id: 'pro',
     name: 'Avançado',
+    badge: '✨',
     priceMonthly: 19.90,
-    priceYearly: 199.00,
+    priceYearly: 199.90,
     features: [
       '✨ Mensagens ilimitadas',
-      '🚀 Modelo Llama 3.3 70B Premium',
-      '📚 Histórico ilimitado',
-      '⚡ Respostas prioritárias',
-      '🎁 Acesso antecipado',
-      '💬 Suporte prioritário 24/7',
-      '🎨 Personalização avançada'
-    ],
-    limits: {
-      messagesPerDay: Infinity,
-      historyDays: Infinity,
-      model: 'llama-3.3-70b-versatile'
-    },
-    badge: '⭐',
-    color: 'from-cyan-500 via-blue-500 to-purple-600'
+      '🚀 Modelo Llama 3.2 90B (mais poderoso)',
+      '⚡ Respostas mais rápidas',
+      '💾 Histórico completo ilimitado',
+      '🎯 Prioridade no suporte',
+      '🎨 Acesso antecipado a novos recursos',
+      '🔒 Segurança avançada',
+      '📊 Análises e insights'
+    ]
   }
 };
 
-// API Key do GROQ (guardada no .env)
-export const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+// Links diretos do Stripe Checkout
+export const STRIPE_LINKS = {
+  MONTHLY: 'https://buy.stripe.com/3cI3cogMk6fSa4M3co',
+  YEARLY: 'https://buy.stripe.com/4gM4gsdA8fQsfp60co'
+};
+
+// Configuração adicional do Stripe
+export const STRIPE_CONFIG = {
+  publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY,
+  successUrl: `${window.location.origin}/chat?success=true`,
+  cancelUrl: `${window.location.origin}/planos?canceled=true`
+};
