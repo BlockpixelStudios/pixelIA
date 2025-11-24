@@ -3,12 +3,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, CheckCircle2, Crown, Zap, Gift, Loader2 } from 'lucide-react';
-import { loadStripe } from '@stripe/stripe-js';
 import Header from '../components/Header';
-import { PLANS } from '../config/plans';
-
-// Inicializar Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+import { PLANS, STRIPE_LINKS } from '../config/plans';
 
 export default function Plans({ user, userPlan, onLogout }) {
   const [billingCycle, setBillingCycle] = useState('monthly');
@@ -24,42 +20,19 @@ export default function Plans({ user, userPlan, onLogout }) {
     setLoading(true);
 
     try {
-      const priceId = billingCycle === 'monthly' 
-        ? import.meta.env.VITE_STRIPE_PRICE_MONTHLY 
-        : import.meta.env.VITE_STRIPE_PRICE_YEARLY;
+      // Pegar o link correto do Stripe baseado no ciclo de cobrança
+      const checkoutUrl = billingCycle === 'monthly' 
+        ? STRIPE_LINKS.MONTHLY 
+        : STRIPE_LINKS.YEARLY;
 
-      // Criar sessão de checkout
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/create-checkout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          priceId,
-          userId: user.id,
-          userEmail: user.email,
-          successUrl: `${window.location.origin}/chat?success=true`,
-          cancelUrl: `${window.location.origin}/planos?canceled=true`
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Erro ao criar sessão');
-      }
-
-      const { sessionId } = await response.json();
+      // Adicionar email do usuário na URL para pré-preencher
+      const urlWithEmail = `${checkoutUrl}?prefilled_email=${encodeURIComponent(user.email)}`;
       
-      // Redirecionar para Stripe
-      const stripe = await stripePromise;
-      const { error } = await stripe.redirectToCheckout({ sessionId });
-      
-      if (error) {
-        throw error;
-      }
+      // Redirecionar direto para o checkout do Stripe
+      window.location.href = urlWithEmail;
     } catch (error) {
       console.error('Erro:', error);
-      alert('❌ Erro ao processar pagamento. Por favor, tente novamente ou use um código promocional.');
-    } finally {
+      alert('❌ Erro ao redirecionar para pagamento. Por favor, tente novamente.');
       setLoading(false);
     }
   };
@@ -211,7 +184,7 @@ export default function Plans({ user, userPlan, onLogout }) {
                 {loading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Processando...
+                    Redirecionando...
                   </>
                 ) : (
                   <>
@@ -285,4 +258,4 @@ export default function Plans({ user, userPlan, onLogout }) {
       </div>
     </div>
   );
-          }
+            }
