@@ -1,9 +1,16 @@
+// 📍 ARQUIVO: src/pages/Chat.jsx - VERSÃO COMPLETA COM TODAS AS FEATURES
+
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useTextToSpeech } from '../hooks/useTextToSpeech';
+import ImageGenerator from '../components/ImageGenerator';
+import ImageAnalyzer from '../components/ImageAnalyzer';
+import CodeGenerator from '../components/CodeGenerator';
+import FeaturesMenu from '../components/FeaturesMenu';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -21,15 +28,24 @@ export default function Chat() {
   const [statusMessage, setStatusMessage] = useState('');
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState('');
+  
+  // Features states
+  const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(null);
+  const [generatedCode, setGeneratedCode] = useState(null);
+  
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  
+  // Text-to-Speech hook
+  const { speak, stop, isSpeaking } = useTextToSpeech();
 
   const suggestedPrompts = [
     "Me dê dicas de produtividade",
     "Explique o que é IA",
-    "Explique o que é física quântica",
-    "Conte uma história engraçada e interessante"
+    "Crie uma imagem de um gato astronauta",
+    "Gere um código HTML de landing page"
   ];
 
   const addConsoleLog = (type, message) => {
@@ -284,7 +300,6 @@ export default function Chat() {
       setEditingText('');
       addConsoleLog('SUCCESS', 'Mensagem editada');
 
-      // Regenerar resposta da IA após edição
       const messageIndex = messages.findIndex(m => m.id === messageId);
       const messagesUpToEdit = messages.slice(0, messageIndex + 1);
       messagesUpToEdit[messagesUpToEdit.length - 1].content = newContent;
@@ -348,7 +363,6 @@ export default function Chat() {
   };
 
   const reportMessage = async (messageId) => {
-    // TODO: Implementar sistema de report
     addConsoleLog('INFO', `Mensagem ${messageId} reportada`);
     alert('Mensagem reportada com sucesso! Nossa equipe irá analisar.');
   };
@@ -387,6 +401,22 @@ export default function Chat() {
     } else {
       handleSend(prompt, currentConversation.id);
     }
+  };
+
+  const detectCodeInResponse = (content) => {
+    // Detectar blocos de código na resposta
+    const codeBlockRegex = /```(\w+)?\n([\s\S]+?)```/g;
+    const matches = [...content.matchAll(codeBlockRegex)];
+    
+    if (matches.length > 0) {
+      const firstBlock = matches[0];
+      const language = firstBlock[1] || 'javascript';
+      const code = firstBlock[2].trim();
+      
+      return { language, code };
+    }
+    
+    return null;
   };
 
   const handleSend = async (messageText = input, conversationId = currentConversation?.id) => {
@@ -465,14 +495,21 @@ export default function Chat() {
       }
 
       const data = await response.json();
+      const responseContent = data.choices[0].message.content;
       addConsoleLog('SUCCESS', 'Resposta recebida da API');
+
+      // Detectar se há código na resposta
+      const codeDetected = detectCodeInResponse(responseContent);
+      if (codeDetected) {
+        setGeneratedCode(codeDetected);
+      }
 
       setStatusMessage('Salvando resposta...');
       
       const assistantMessage = {
         conversation_id: conversationId,
         role: 'assistant',
-        content: data.choices[0].message.content,
+        content: responseContent,
         created_at: new Date().toISOString()
       };
       
@@ -523,6 +560,11 @@ export default function Chat() {
     }
   };
 
+  const handleFeatureSelect = (featureId) => {
+    setActiveFeature(featureId);
+    addConsoleLog('INFO', `Feature selecionada: ${featureId}`);
+  };
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Bom dia!';
@@ -549,9 +591,15 @@ export default function Chat() {
             <div className="relative group my-2">
               <button
                 onClick={() => copyToClipboard(codeContent)}
-                className="absolute right-2 top-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute right-2 top-2 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
               >
                 📋 Copiar
+              </button>
+              <button
+                onClick={() => setGeneratedCode({ language: match[1], code: codeContent })}
+                className="absolute right-20 top-2 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+              >
+                👁️ Ver Preview
               </button>
               <SyntaxHighlighter
                 style={vscDarkPlus}
@@ -600,6 +648,33 @@ export default function Chat() {
         </div>
         <h1 className="text-white text-2xl font-bold">PixelIA</h1>
       </div>
+
+      {/* Modals */}
+      {activeFeature === 'image-gen' && (
+        <ImageGenerator 
+          userProfile={userProfile}
+          onClose={() => setActiveFeature(null)}
+        />
+      )}
+
+      {activeFeature === 'image-analysis' && (
+        <ImageAnalyzer
+          userProfile={userProfile}
+          onClose={() => setActiveFeature(null)}
+          onSendToChat={(text) => {
+            setInput(text);
+            setActiveFeature(null);
+          }}
+        />
+      )}
+
+      {generatedCode && (
+        <CodeGenerator
+          code={generatedCode.code}
+          language={generatedCode.language}
+          onClose={() => setGeneratedCode(null)}
+        />
+      )}
 
       <div className="flex h-screen relative z-10">
         {/* Overlay para mobile quando sidebar aberto */}
@@ -653,7 +728,7 @@ export default function Chat() {
 
             {/* Console */}
             {showConsole && (
-              <div className="bg-black/50 backdrop-blur-lg rounded-lg p-3 mb-4 max-h-40 overflow-y-auto">
+              <div className="bg-black/50 backdrop-blur-lg rounded-lg p-3 mb-4 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20">
                 <p className="text-white/70 text-xs font-bold mb-2">Console de Debug</p>
                 <div className="space-y-1">
                   {consoleMessages.slice(-10).map((log, idx) => (
@@ -731,7 +806,7 @@ export default function Chat() {
         </button>
 
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col pt-16">
+        <div className="flex-1 flex flex-col pt-16 relative">
           {!currentConversation || messages.length === 0 ? (
             // Welcome Screen
             <div className="flex-1 flex flex-col items-center justify-center px-4">
@@ -834,6 +909,21 @@ export default function Chat() {
                             Tentar novamente
                           </button>
                           <button
+                            onClick={() => {
+                              if (isSpeaking) {
+                                stop();
+                              } else {
+                                speak(message.content);
+                              }
+                            }}
+                            className="text-white/60 hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSpeaking ? "M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" : "M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.828-9.9a9 9 0 012.828 2.828"} />
+                            </svg>
+                            {isSpeaking ? 'Parar' : 'Ouvir'}
+                          </button>
+                          <button
                             onClick={() => copyToClipboard(message.content)}
                             className="text-white/60 hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all"
                           >
@@ -874,6 +964,14 @@ export default function Chat() {
             </div>
           )}
 
+          {/* Features Menu */}
+          {showFeaturesMenu && (
+            <FeaturesMenu
+              onSelectFeature={handleFeatureSelect}
+              onClose={() => setShowFeaturesMenu(false)}
+            />
+          )}
+
           {/* Status Bar acima do input */}
           <div className="px-4 py-2 border-t border-white/10 backdrop-blur-sm">
             <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between text-xs md:text-sm gap-2">
@@ -902,20 +1000,14 @@ export default function Chat() {
             <div className="max-w-4xl mx-auto">
               <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-2 flex items-end gap-2 shadow-2xl">
                 <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-white/70 hover:text-white p-2 transition-colors flex-shrink-0 hidden md:block"
-                  title="Anexar arquivo"
+                  onClick={() => setShowFeaturesMenu(!showFeaturesMenu)}
+                  className="text-white/70 hover:text-white p-2 transition-colors flex-shrink-0"
+                  title="Ferramentas IA"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                   </svg>
                 </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx"
-                />
                 
                 <textarea
                   ref={textareaRef}
@@ -953,7 +1045,6 @@ export default function Chat() {
           animation: fade-in 0.3s ease-out;
         }
 
-        /* Stars */
         .stars {
           position: absolute;
           width: 100%;
@@ -975,7 +1066,6 @@ export default function Chat() {
           50% { opacity: 1; }
         }
 
-        /* Blobs */
         .blob {
           position: absolute;
           border-radius: 50%;
@@ -1018,7 +1108,6 @@ export default function Chat() {
           75% { transform: translate(40px, 40px); }
         }
 
-        /* Scrollbar personalizado */
         .scrollbar-thin::-webkit-scrollbar {
           width: 6px;
         }
@@ -1038,4 +1127,4 @@ export default function Chat() {
       `}</style>
     </div>
   );
-      }
+}
